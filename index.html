@@ -564,7 +564,20 @@ function toBase64(file) {
 async function dlFile(name) {
   const relPath = CUR_PATH ? CUR_PATH + '/' + name : name;
   const rawUrl = `https://raw.githubusercontent.com/${CONFIG.owner}/${CONFIG.repo}/${CONFIG.branch}/${FULL_PATH}/${relPath}`;
-  window.open(rawUrl, '_blank');
+  try {
+    const r = await fetch(rawUrl);
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    window.open(rawUrl, '_blank');
+  }
 }
 
 async function renameFile(name, sha) {
