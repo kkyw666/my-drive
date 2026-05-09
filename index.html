@@ -383,14 +383,13 @@ function render() {
     const click = isDir
       ? `enterDir('${esc(CUR_PATH ? CUR_PATH + '/' + f.name : f.name)}')`
       : `preview('${esc(f.name)}')`;
-    const adminActs = IS_ADMIN ? `
-      <div class="actions">
-        <button onclick="event.stopPropagation();dlFile('${esc(f.name)}')" title="下载">⬇</button>
+    const dlBtn = !isDir ? `<button onclick="event.stopPropagation();dlFile('${esc(f.name)}')" title="下载">⬇</button>` : '';
+    const adminBtns = IS_ADMIN ? `
         <button onclick="event.stopPropagation();renameFile('${esc(f.name)}','${f.sha}')" title="重命名">✏️</button>
-        <button class="d" onclick="event.stopPropagation();delFile('${esc(f.name)}','${f.sha}')" title="删除">🗑</button>
-      </div>` : '';
+        <button class="d" onclick="event.stopPropagation();delFile('${esc(f.name)}','${f.sha}')" title="删除">🗑</button>` : '';
+    const actionsHtml = (dlBtn || adminBtns) ? `\n      <div class="actions">${dlBtn}${adminBtns}</div>` : '';
     return `<div class="card${isDir?' folder':''}" onclick="${click}" title="${f.name}">
-      ${adminActs}
+      ${actionsHtml}
       <span class="icon">${icon}</span>
       <div class="name">${f.name}</div>
       <div class="meta"><span>${isDir?'文件夹':fmtSize(f.size)}</span><span>${ext(f.name).toUpperCase()}</span></div>
@@ -627,24 +626,27 @@ async function preview(name) {
 
   if (imgExts.includes(ext)) {
     showModal(`<h3>${name}</h3><div class="pv"><img src="${rawUrl}" alt="${name}"></div>
-      <div class="m-acts"><a class="btn btn-g" href="${rawUrl}" target="_blank">新窗口</a>
+      <div class="m-acts"><a class="btn btn-p" href="${rawUrl}" download="${name}">⬇ 下载</a><a class="btn btn-g" href="${rawUrl}" target="_blank">新窗口</a>
       <button class="btn btn-g" onclick="closeModal()">关闭</button></div>`);
   } else if (vidExts.includes(ext)) {
     showModal(`<h3>${name}</h3><div class="pv"><video src="${rawUrl}" controls></video></div>
-      <div class="m-acts"><button class="btn btn-g" onclick="closeModal()">关闭</button></div>`);
+      <div class="m-acts"><a class="btn btn-p" href="${rawUrl}" download="${name}">⬇ 下载</a>
+      <button class="btn btn-g" onclick="closeModal()">关闭</button></div>`);
   } else if (audExts.includes(ext)) {
     showModal(`<h3>${name}</h3><div class="pv"><audio src="${rawUrl}" controls style="width:100%"></audio></div>
-      <div class="m-acts"><button class="btn btn-g" onclick="closeModal()">关闭</button></div>`);
+      <div class="m-acts"><a class="btn btn-p" href="${rawUrl}" download="${name}">⬇ 下载</a>
+      <button class="btn btn-g" onclick="closeModal()">关闭</button></div>`);
   } else if (txtExts.includes(ext)) {
     try {
       const r = await fetch(rawUrl);
       const text = await r.text();
       showModal(`<h3>${name}</h3><div class="pv"><pre>${escHtml(text)}</pre></div>
-        <div class="m-acts"><button class="btn btn-g" onclick="closeModal()">关闭</button></div>`);
+        <div class="m-acts"><a class="btn btn-p" href="${rawUrl}" download="${name}">⬇ 下载</a>
+        <button class="btn btn-g" onclick="closeModal()">关闭</button></div>`);
     } catch (e) { toast('预览失败', 'err'); }
   } else if (ext === 'pdf') {
     showModal(`<h3>${name}</h3><div class="pv"><iframe src="${rawUrl}" style="width:100%;height:50vh;border:none"></iframe></div>
-      <div class="m-acts"><a class="btn btn-g" href="${rawUrl}" target="_blank">新窗口</a>
+      <div class="m-acts"><a class="btn btn-p" href="${rawUrl}" download="${name}">⬇ 下载</a><a class="btn btn-g" href="${rawUrl}" target="_blank">新窗口</a>
       <button class="btn btn-g" onclick="closeModal()">关闭</button></div>`);
   } else {
     showModal(`<h3>${name}</h3><p style="color:var(--t2);margin:20px 0">无法预览此文件</p>
