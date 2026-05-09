@@ -64,13 +64,37 @@ a{color:var(--ac2);text-decoration:none}
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .card .meta{display:flex;justify-content:space-between;margin-top:10px;
   font-size:11px;color:var(--t3)}
-.card .actions{position:absolute;top:10px;right:10px;opacity:0;transition:.2s;display:flex;gap:4px}
-.card:hover .actions{opacity:1}
-.card .actions button{width:30px;height:30px;border:none;border-radius:8px;
-  background:var(--s3);color:var(--t2);cursor:pointer;font-size:15px;
-  display:flex;align-items:center;justify-content:center;transition:.15s}
-.card .actions button:hover{background:var(--ac);color:#fff}
-.card .actions button.d:hover{background:var(--rd)}
+.card .icon{font-size:40px;display:block;margin-bottom:14px}
+.card .name{font-size:13px;font-weight:600;word-break:break-all;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.card .meta{display:flex;justify-content:space-between;margin-top:10px;
+  font-size:11px;color:var(--t3)}
+
+/* ===== Action Sheet ===== */
+.action-sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.5);backdrop-filter:blur(4px);
+  z-index:1001;opacity:0;pointer-events:none;transition:.2s}
+.action-sheet-bg.show{opacity:1;pointer-events:all}
+.action-sheet{position:fixed;bottom:0;left:0;right:0;z-index:1002;
+  background:var(--s1);border-top:1px solid var(--bd);border-radius:16px 16px 0 0;
+  padding:20px 20px calc(20px + env(safe-area-inset-bottom));
+  transform:translateY(100%);transition:.3s cubic-bezier(.4,0,.2,1);
+  max-width:500px;margin:0 auto}
+.action-sheet-bg.show .action-sheet{transform:translateY(0)}
+.action-sheet .as-title{font-size:14px;font-weight:600;color:var(--t1);
+  text-align:center;margin-bottom:6px;word-break:break-all;
+  display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+.action-sheet .as-sub{font-size:12px;color:var(--t3);text-align:center;margin-bottom:16px}
+.action-sheet .as-btns{display:flex;flex-direction:column;gap:8px}
+.action-sheet .as-btn{display:flex;align-items:center;gap:14px;padding:14px 18px;
+  background:var(--s2);border:1px solid var(--bd);border-radius:var(--rs);
+  color:var(--t1);font-size:14px;font-weight:500;cursor:pointer;transition:.15s}
+.action-sheet .as-btn:hover{border-color:var(--ac);background:var(--acg)}
+.action-sheet .as-btn:active{transform:scale(.98)}
+.action-sheet .as-btn .as-icon{font-size:20px;width:28px;text-align:center}
+.action-sheet .as-cancel{margin-top:8px;padding:14px;text-align:center;
+  background:var(--s2);border:1px solid var(--bd);border-radius:var(--rs);
+  color:var(--t2);font-size:14px;font-weight:500;cursor:pointer;transition:.15s}
+.action-sheet .as-cancel:hover{color:var(--t1)}
 
 .card.folder .icon{font-size:44px}
 
@@ -169,9 +193,6 @@ footer a{color:var(--t2)}
   .card .name{font-size:12px}
   .card .meta{font-size:10px}
 
-  /* 卡片操作按钮 - 手机上始终可见 */
-  .card .actions{opacity:1;top:4px;right:4px;gap:4px;padding:6px;background:rgba(14,14,22,.85);border-radius:10px}
-  .card .actions button{width:36px;height:36px;font-size:14px;border-radius:10px}
   .card:hover{transform:none;box-shadow:none}
 
   .toolbar{flex-direction:column;align-items:stretch;gap:10px}
@@ -382,13 +403,8 @@ function render() {
     const icon = isDir ? '📁' : getIcon(f.name);
     const click = isDir
       ? `enterDir('${esc(CUR_PATH ? CUR_PATH + '/' + f.name : f.name)}')`
-      : `preview('${esc(f.name)}')`;
-    const dlBtn = !isDir ? `<button onclick="event.stopPropagation();dlFile('${esc(f.name)}')" title="下载">⬇</button>` : '';
-    const adminBtns = IS_ADMIN ? `<button onclick="event.stopPropagation();renameFile('${esc(f.name)}','${f.sha}')" title="重命名">✏️</button>
-        <button class="d" onclick="event.stopPropagation();delFile('${esc(f.name)}','${f.sha}')" title="删除">🗑</button>` : '';
-    const actionsHtml = (dlBtn || adminBtns) ? `<div class="actions" onclick="event.stopPropagation()">${dlBtn}${adminBtns}</div>` : '';
+      : `showFileActions('${esc(f.name)}','${f.sha||''}',${isDir})`;
     return `<div class="card${isDir?' folder':''}" onclick="${click}" title="${f.name}">
-      ${actionsHtml}
       <span class="icon">${icon}</span>
       <div class="name">${f.name}</div>
       <div class="meta"><span>${isDir?'文件夹':fmtSize(f.size)}</span><span>${ext(f.name).toUpperCase()}</span></div>
@@ -563,15 +579,42 @@ function toBase64(file) {
 // ==================== File Ops ====================
 function dlFile(name) {
   const relPath = CUR_PATH ? CUR_PATH + '/' + name : name;
-  const url = `https://cdn.jsdelivr.net/gh/${CONFIG.owner}/${CONFIG.repo}@${CONFIG.branch}/${CONFIG.folder}/${relPath}`;
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = name;
-  a.target = '_blank';
-  a.rel = 'noopener';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
+  const rawUrl = `https://raw.githubusercontent.com/${CONFIG.owner}/${CONFIG.repo}/${CONFIG.branch}/${FULL_PATH}/${relPath}`;
+  toast('正在下载...', 'ok');
+  fetch(rawUrl).then(r => r.blob()).then(blob => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 3000);
+  }).catch(() => window.open(rawUrl, '_blank'));
+}
+
+// ==================== Action Sheet ====================
+function showFileActions(name, sha, isDir) {
+  if (isDir) { enterDir(CUR_PATH ? CUR_PATH + '/' + name : name); return; }
+  const bg = document.createElement('div');
+  bg.className = 'action-sheet-bg';
+  const adminBtns = IS_ADMIN ? `
+    <div class="as-btn" onclick="this.closest('.action-sheet-bg').remove();renameFile('${esc(name)}','${sha}')">
+      <span class="as-icon">✏️</span><span>重命名</span></div>
+    <div class="as-btn" onclick="this.closest('.action-sheet-bg').remove();delFile('${esc(name)}','${sha}')">
+      <span class="as-icon">🗑️</span><span style="color:var(--rd)">删除</span></div>` : '';
+  bg.innerHTML = `<div class="action-sheet">
+    <div class="as-title">${name}</div>
+    <div class="as-sub">${ext(name).toUpperCase()} 文件</div>
+    <div class="as-btns">
+      <div class="as-btn" onclick="this.closest('.action-sheet-bg').remove();dlFile('${esc(name)}')">
+        <span class="as-icon">📥</span><span>下载到本地</span></div>
+      <div class="as-btn" onclick="this.closest('.action-sheet-bg').remove();preview('${esc(name)}')">
+        <span class="as-icon">👁️</span><span>在线预览</span></div>
+      ${adminBtns}
+    </div>
+    <div class="as-cancel" onclick="this.closest('.action-sheet-bg').remove()">取消</div>
+  </div>`;
+  bg.addEventListener('click', e => { if (e.target === bg) bg.remove(); });
+  document.body.appendChild(bg);
+  requestAnimationFrame(() => bg.classList.add('show'));
 }
 
 async function renameFile(name, sha) {
