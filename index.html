@@ -303,6 +303,35 @@ const CONFIG = {
 const API = 'https://api.github.com';
 const FULL_PATH = CONFIG.folder;
 
+// ==================== Mirrors ====================
+const MIRRORS = [
+  '',  // 原始链接 (raw.githubusercontent.com)
+  'https://ghfast.top/',
+  'https://gh-proxy.com/',
+  'https://github.moeyy.xyz/',
+  'https://mirror.ghproxy.com/',
+];
+
+function rawUrl(path) {
+  return `https://raw.githubusercontent.com/${CONFIG.owner}/${CONFIG.repo}/${CONFIG.branch}/${path}`;
+}
+
+function mirrorUrls(path) {
+  const base = rawUrl(path);
+  return MIRRORS.map(m => m ? m + base : base);
+}
+
+async function fetchMirror(path) {
+  const urls = mirrorUrls(path);
+  for (const url of urls) {
+    try {
+      const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      if (r.ok) return r;
+    } catch (e) {}
+  }
+  throw new Error('所有链接均失败');
+}
+
 // ==================== State ====================
 let FILES = [];          // 当前目录文件列表
 let ALL_FLAT = [];       // 所有文件（递归，用于统计）
@@ -579,15 +608,16 @@ function toBase64(file) {
 // ==================== File Ops ====================
 function dlFile(name) {
   const relPath = CUR_PATH ? CUR_PATH + '/' + name : name;
-  const rawUrl = `https://raw.githubusercontent.com/${CONFIG.owner}/${CONFIG.repo}/${CONFIG.branch}/${FULL_PATH}/${relPath}`;
+  const fullPath = FULL_PATH + '/' + relPath;
   toast('正在下载...', 'ok');
-  fetch(rawUrl).then(r => r.blob()).then(blob => {
+  fetchMirror(fullPath).then(r => r.blob()).then(blob => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = name;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 3000);
-  }).catch(() => window.open(rawUrl, '_blank'));
+    toast('下载完成', 'ok');
+  }).catch(() => toast('下载失败', 'err'));
 }
 
 // ==================== Action Sheet ====================
@@ -667,35 +697,37 @@ async function preview(name) {
   const txtExts = ['txt','md','json','xml','html','css','js','ts','py','go','rs','java','rb','php','sh','yml','yaml','toml','csv','env','gitignore','jsx','tsx','vue','svelte','sql','c','cpp','h','hpp'];
 
   const relPath = CUR_PATH ? CUR_PATH + '/' + name : name;
-  const rawUrl = `https://raw.githubusercontent.com/${CONFIG.owner}/${CONFIG.repo}/${CONFIG.branch}/${FULL_PATH}/${relPath}`;
+  const fullPath = FULL_PATH + '/' + relPath;
+  const mUrls = mirrorUrls(fullPath);
+  const url = mUrls[0]; // 默认用原始链接做 src，浏览器会自动加载
 
   if (imgExts.includes(ext)) {
-    showModal(`<h3>${name}</h3><div class="pv"><img src="${rawUrl}" alt="${name}"></div>
-      <div class="m-acts"><button class="btn btn-p" onclick="dlFile('${esc(name)}')">⬇ 下载</button><a class="btn btn-g" href="${rawUrl}" target="_blank">新窗口</a>
+    showModal(`<h3>${name}</h3><div class="pv"><img src="${url}" alt="${name}"></div>
+      <div class="m-acts"><button class="btn btn-p" onclick="dlFile('${esc(name)}')">📥 下载</button><a class="btn btn-g" href="${url}" target="_blank">新窗口</a>
       <button class="btn btn-g" onclick="closeModal()">关闭</button></div>`);
   } else if (vidExts.includes(ext)) {
-    showModal(`<h3>${name}</h3><div class="pv"><video src="${rawUrl}" controls></video></div>
-      <div class="m-acts"><button class="btn btn-p" onclick="dlFile('${esc(name)}')">⬇ 下载</button>
+    showModal(`<h3>${name}</h3><div class="pv"><video src="${url}" controls></video></div>
+      <div class="m-acts"><button class="btn btn-p" onclick="dlFile('${esc(name)}')">📥 下载</button>
       <button class="btn btn-g" onclick="closeModal()">关闭</button></div>`);
   } else if (audExts.includes(ext)) {
-    showModal(`<h3>${name}</h3><div class="pv"><audio src="${rawUrl}" controls style="width:100%"></audio></div>
-      <div class="m-acts"><button class="btn btn-p" onclick="dlFile('${esc(name)}')">⬇ 下载</button>
+    showModal(`<h3>${name}</h3><div class="pv"><audio src="${url}" controls style="width:100%"></audio></div>
+      <div class="m-acts"><button class="btn btn-p" onclick="dlFile('${esc(name)}')">📥 下载</button>
       <button class="btn btn-g" onclick="closeModal()">关闭</button></div>`);
   } else if (txtExts.includes(ext)) {
     try {
-      const r = await fetch(rawUrl);
+      const r = await fetchMirror(fullPath);
       const text = await r.text();
       showModal(`<h3>${name}</h3><div class="pv"><pre>${escHtml(text)}</pre></div>
-        <div class="m-acts"><button class="btn btn-p" onclick="dlFile('${esc(name)}')">⬇ 下载</button>
+        <div class="m-acts"><button class="btn btn-p" onclick="dlFile('${esc(name)}')">📥 下载</button>
         <button class="btn btn-g" onclick="closeModal()">关闭</button></div>`);
     } catch (e) { toast('预览失败', 'err'); }
   } else if (ext === 'pdf') {
-    showModal(`<h3>${name}</h3><div class="pv"><iframe src="${rawUrl}" style="width:100%;height:50vh;border:none"></iframe></div>
-      <div class="m-acts"><button class="btn btn-p" onclick="dlFile('${esc(name)}')">⬇ 下载</button><a class="btn btn-g" href="${rawUrl}" target="_blank">新窗口</a>
+    showModal(`<h3>${name}</h3><div class="pv"><iframe src="${url}" style="width:100%;height:50vh;border:none"></iframe></div>
+      <div class="m-acts"><button class="btn btn-p" onclick="dlFile('${esc(name)}')">📥 下载</button><a class="btn btn-g" href="${url}" target="_blank">新窗口</a>
       <button class="btn btn-g" onclick="closeModal()">关闭</button></div>`);
   } else {
     showModal(`<h3>${name}</h3><p style="color:var(--t2);margin:20px 0">无法预览此文件</p>
-      <div class="m-acts"><button class="btn btn-p" onclick="dlFile('${esc(name)}')">⬇ 下载</button>
+      <div class="m-acts"><button class="btn btn-p" onclick="dlFile('${esc(name)}')">📥 下载</button>
       <button class="btn btn-g" onclick="closeModal()">关闭</button></div>`);
   }
 }
