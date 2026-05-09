@@ -561,25 +561,17 @@ function toBase64(file) {
 }
 
 // ==================== File Ops ====================
-async function dlFile(name) {
+function dlFile(name) {
   const relPath = CUR_PATH ? CUR_PATH + '/' + name : name;
-  const rawUrl = `https://raw.githubusercontent.com/${CONFIG.owner}/${CONFIG.repo}/${CONFIG.branch}/${FULL_PATH}/${relPath}`;
-  try {
-    toast('正在下载...', 'ok');
-    const r = await fetch(rawUrl);
-    const blob = await r.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = name;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  } catch (e) {
-    toast('下载失败，尝试新窗口打开', 'err');
-    window.open(rawUrl, '_blank');
-  }
+  const url = `https://cdn.jsdelivr.net/gh/${CONFIG.owner}/${CONFIG.repo}@${CONFIG.branch}/${CONFIG.folder}/${relPath}`;
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  a.target = '_blank';
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 }
 
 async function renameFile(name, sha) {
