@@ -298,22 +298,32 @@ const MIRRORS = [
   'https://gh-proxy.com/',
   'https://github.moeyy.xyz/',
   'https://mirror.ghproxy.com/',
+  'https://gh.llkk.cc/',
+  'https://github.91chi.fun/',
+  'https://ghps.cc/',
+  'https://gh.ddlc.top/',
 ];
 
 function rawUrl(path) {
   return `https://raw.githubusercontent.com/${CONFIG.owner}/${CONFIG.repo}/${CONFIG.branch}/${path}`;
 }
 
+function jsdelivrUrl(path) {
+  return `https://cdn.jsdelivr.net/gh/${CONFIG.owner}/${CONFIG.repo}@${CONFIG.branch}/${path}`;
+}
+
 function mirrorUrls(path) {
   const base = rawUrl(path);
-  return MIRRORS.map(m => m ? m + base : base);
+  const urls = MIRRORS.map(m => m ? m + base : base);
+  urls.push(jsdelivrUrl(path));
+  return urls;
 }
 
 async function fetchMirror(path) {
   const urls = mirrorUrls(path);
   for (const url of urls) {
     try {
-      const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      const r = await fetch(url, { signal: AbortSignal.timeout(3000) });
       if (r.ok) return r;
     } catch (e) {}
   }
