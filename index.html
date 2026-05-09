@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>云盘</title>
+<title>可可鹦鹉的云盘</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☁️</text></svg>">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -157,8 +157,8 @@ footer a{color:var(--t2)}
 
 <!-- Hero -->
 <div class="hero">
-  <h1>☁️ 云盘</h1>
-  <p>我的个人文件库 · 公开访问 · 免费托管</p>
+  <h1>🦜 可可鹦鹉的云盘</h1>
+  <p>可可鹦鹉的个人文件库 · 公开访问 · 免费托管</p>
   <div class="stats">
     <div class="stat"><div class="num" id="st-count">-</div><div class="label">文件数</div></div>
     <div class="stat"><div class="num" id="st-size">-</div><div class="label">总大小</div></div>
@@ -420,7 +420,6 @@ function doAdminLogin() {
 
 // ==================== Upload ====================
 function handleUpload(fileList) {
-  if (!IS_ADMIN) { toast('请先登录管理', 'err'); return; }
   for (const file of fileList) uploadOne(file);
 }
 
