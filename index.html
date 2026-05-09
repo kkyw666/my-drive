@@ -559,7 +559,8 @@ function handleUpload(fileList) {
 }
 
 async function uploadOne(file) {
-  if (file.size > 100 * 1024 * 1024) { toast(`${file.name} 超过100MB`, 'err'); return; }
+  // Git Data API 理论上无硬性限制，但浏览器内存有限，限制 200MB
+  if (file.size > 200 * 1024 * 1024) { toast(`${file.name} 超过200MB限制`, 'err'); return; }
   const relPath = CUR_PATH ? CUR_PATH + '/' + file.name : file.name;
   const fullPath = FULL_PATH + '/' + relPath;
   const id = 'p' + Date.now() + Math.random();
@@ -570,53 +571,118 @@ async function uploadOne(file) {
     <span class="ps" id="${id}s">⏳</span>
   </div>`;
 
+  const setStatus = (pct, icon) => {
+    const el = document.getElementById(`${id}f`);
+    const st = document.getElementById(`${id}s`);
+    if (el) el.style.width = pct + '%';
+    if (st) st.textContent = icon;
+  };
+
   try {
-    const content = await toBase64(file);
-    let sha;
-    try {
-      const r = await apiFetch(`/repos/${CONFIG.owner}/${CONFIG.repo}/contents/${fullPath}`, {
-        headers: { 'Authorization': `token ${TOKEN}` }
-      });
-      if (r.ok) { sha = (await r.json()).sha; }
-    } catch (e) {}
+    // 1. 读取文件为 ArrayBuffer，手动转 base64（避免 readAsDataURL 内存翻倍）
+    setStatus(5, '📖');
+    const content = await fileToBase64(file, pct => setStatus(5 + pct * 15, '📖'));
 
-    document.getElementById(`${id}f`).style.width = '60%';
-    document.getElementById(`${id}s`).textContent = '⬆️';
-
-    const body = { message: `Upload: ${file.name}`, content, branch: CONFIG.branch };
-    if (sha) body.sha = sha;
-
-    const r2 = await apiFetch(`/repos/${CONFIG.owner}/${CONFIG.repo}/contents/${fullPath}`, {
-      method: 'PUT',
+    // 2. 创建 blob（Git Data API，比 Contents API 更高效）
+    setStatus(25, '☁️');
+    const blobResp = await apiFetch(`/repos/${CONFIG.owner}/${CONFIG.repo}/git/blobs`, {
+      method: 'POST',
       headers: { 'Authorization': `token ${TOKEN}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
+      body: JSON.stringify({ content, encoding: 'base64' })
     });
-    if (!r2.ok) {
-      const e = await r2.json();
-      throw new Error(e.message || JSON.stringify(e.errors || '上传失败'));
+    if (!blobResp.ok) {
+      const e = await blobResp.json();
+      throw new Error(e.message || '创建 blob 失败');
+    }
+    const blobSha = (await blobResp.json()).sha;
+    setStatus(45, '🔗');
+
+    // 3. 获取当前分支的最新 commit 和 tree
+    const refResp = await apiFetch(`/repos/${CONFIG.owner}/${CONFIG.repo}/git/refs/heads/${CONFIG.branch}`, {
+      headers: { 'Authorization': `token ${TOKEN}` }
+    });
+    if (!refResp.ok) throw new Error('获取分支信息失败');
+    const latestCommitSha = (await refResp.json()).object.sha;
+
+    const commitResp = await apiFetch(`/repos/${CONFIG.owner}/${CONFIG.repo}/git/commits/${latestCommitSha}`, {
+      headers: { 'Authorization': `token ${TOKEN}` }
+    });
+    if (!commitResp.ok) throw new Error('获取 commit 信息失败');
+    const baseTreeSha = (await commitResp.json()).tree.sha;
+    setStatus(55, '🌲');
+
+    // 4. 创建新 tree（只包含这一个文件变更）
+    const treeResp = await apiFetch(`/repos/${CONFIG.owner}/${CONFIG.repo}/git/trees`, {
+      method: 'POST',
+      headers: { 'Authorization': `token ${TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        base_tree: baseTreeSha,
+        tree: [{ path: fullPath, mode: '100644', type: 'blob', sha: blobSha }]
+      })
+    });
+    if (!treeResp.ok) {
+      const e = await treeResp.json();
+      throw new Error(e.message || '创建 tree 失败');
+    }
+    const newTreeSha = (await treeResp.json()).sha;
+    setStatus(70, '📝');
+
+    // 5. 创建 commit
+    const newCommitResp = await apiFetch(`/repos/${CONFIG.owner}/${CONFIG.repo}/git/commits`, {
+      method: 'POST',
+      headers: { 'Authorization': `token ${TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: `Upload: ${file.name}`,
+        tree: newTreeSha,
+        parents: [latestCommitSha]
+      })
+    });
+    if (!newCommitResp.ok) {
+      const e = await newCommitResp.json();
+      throw new Error(e.message || '创建 commit 失败');
+    }
+    const newCommitSha = (await newCommitResp.json()).sha;
+    setStatus(85, '🚀');
+
+    // 6. 更新分支引用
+    const updateResp = await apiFetch(`/repos/${CONFIG.owner}/${CONFIG.repo}/git/refs/heads/${CONFIG.branch}`, {
+      method: 'PATCH',
+      headers: { 'Authorization': `token ${TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sha: newCommitSha, force: false })
+    });
+    if (!updateResp.ok) {
+      const e = await updateResp.json();
+      throw new Error(e.message || '更新分支失败');
     }
 
-    document.getElementById(`${id}f`).style.width = '100%';
-    document.getElementById(`${id}s`).textContent = '✅';
+    setStatus(100, '✅');
     toast(`${file.name} 上传成功`, 'ok');
     setTimeout(() => { const el = document.getElementById(id); if (el) el.remove(); }, 3000);
     loadAll().then(() => loadDir());
   } catch (e) {
-    document.getElementById(`${id}s`).textContent = '❌';
+    setStatus(0, '❌');
     toast(`${file.name}: ${e.message}`, 'err');
     console.error('Upload error:', e);
   }
 }
 
-function toBase64(file) {
+// ArrayBuffer → base64 分块转换（避免内存溢出）
+function fileToBase64(file, onProgress) {
   return new Promise((res, rej) => {
     const r = new FileReader();
     r.onload = () => {
-      const b64 = r.result.split(',')[1];
-      res(b64);
+      const bytes = new Uint8Array(r.result);
+      const chunkSize = 32768; // 每次处理 32KB
+      const chunks = [];
+      const total = Math.ceil(bytes.length / chunkSize);
+      for (let i = 0; i < bytes.length; i += chunkSize) {
+        chunks.push(String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize)));
+        if (onProgress) onProgress(Math.min(100, Math.round((i / bytes.length) * 100)));
+      }
+      res(btoa(chunks.join('')));
     };
     r.onerror = rej;
-    r.readAsDataURL(file);
+    r.readAsArrayBuffer(file);
   });
 }
 
