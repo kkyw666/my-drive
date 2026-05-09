@@ -64,11 +64,6 @@ a{color:var(--ac2);text-decoration:none}
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .card .meta{display:flex;justify-content:space-between;margin-top:10px;
   font-size:11px;color:var(--t3)}
-.card .icon{font-size:40px;display:block;margin-bottom:14px}
-.card .name{font-size:13px;font-weight:600;word-break:break-all;
-  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.card .meta{display:flex;justify-content:space-between;margin-top:10px;
-  font-size:11px;color:var(--t3)}
 
 /* ===== Action Sheet ===== */
 .action-sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.5);backdrop-filter:blur(4px);
@@ -165,13 +160,14 @@ footer a{color:var(--t2)}
   font-size:20px;font-weight:600;color:var(--ac2);pointer-events:none}
 .drop-overlay.show{display:flex}
 
-/* ===== Mobile Upload Button ===== */
+/* ===== Upload Button (all screens) ===== */
 .mobile-upload{display:none;position:fixed;bottom:24px;right:24px;z-index:100;
   width:56px;height:56px;border-radius:50%;border:none;
   background:var(--ac);color:#fff;font-size:28px;
   box-shadow:0 4px 20px rgba(99,102,241,.4);cursor:pointer;
   transition:.2s;align-items:center;justify-content:center}
 .mobile-upload:active{transform:scale(.9)}
+body.is-admin .mobile-upload{display:flex}
 
 /* ===== Back Button (mobile) ===== */
 .back-btn{display:none;align-items:center;gap:6px;padding:8px 16px;
@@ -206,33 +202,24 @@ footer a{color:var(--t2)}
   .breadcrumb{font-size:12px;gap:4px;flex-wrap:wrap}
   .breadcrumb .bc{padding:2px 0}
 
-  /* 显示返回按钮 */
   .back-btn{display:inline-flex}
 
-  /* 手机上传按钮 - 仅管理员可见 */
-  body.is-admin .mobile-upload{display:flex}
-
-  /* Modal 手机适配 */
   .modal{padding:24px 20px;width:95%;max-width:none;border-radius:14px}
   .modal h3{font-size:16px;margin-bottom:16px}
   .modal input,.modal textarea{padding:10px 14px;font-size:13px}
   .btn{padding:10px 18px;font-size:12px}
 
-  /* Preview 手机适配 */
   .pv{max-height:50vh;padding:12px}
   .pv pre{font-size:11px;line-height:1.5}
 
-  /* Upload progress */
   .prog-item{padding:10px 12px;gap:8px}
   .prog-item .pn{font-size:12px}
 
-  /* Toast 手机适配 */
   .toasts{top:12px;right:12px;left:12px}
   .toast{max-width:100%;font-size:12px;padding:12px 16px}
 
   footer{padding:30px 16px;font-size:11px;margin-top:30px}
 
-  /* Drop overlay 手机隐藏 */
   .drop-overlay{display:none!important}
 }
 </style>
@@ -247,9 +234,9 @@ footer a{color:var(--t2)}
   <h1>🦜 可可鹦鹉的云盘</h1>
   <p>可可鹦鹉的个人文件库 · 公开访问 · 免费托管</p>
   <div class="stats">
-    <div class="stat"><div class="num" id="st-count">-</div><div class="label">文件数</div></div>
-    <div class="stat"><div class="num" id="st-size">-</div><div class="label">总大小</div></div>
-    <div class="stat"><div class="num" id="st-folders">-</div><div class="label">文件夹</div></div>
+    <div class="stat"><div class="num" id="st-count">0</div><div class="label">文件数</div></div>
+    <div class="stat"><div class="num" id="st-size">0 B</div><div class="label">总大小</div></div>
+    <div class="stat"><div class="num" id="st-folders">0</div><div class="label">文件夹</div></div>
   </div>
 </div>
 
@@ -262,8 +249,8 @@ footer a{color:var(--t2)}
 
 <!-- Content -->
 <div class="container">
-  <button class="back-btn" id="back-btn" onclick="goBack()">← 返回上级</button>
-  <div class="breadcrumb" id="bc"></div>
+  <button class="back-btn" id="back-btn" onclick="goBack()" style="display: none;">← 返回上级</button>
+  <div class="breadcrumb" id="bc"><span class="bc now" onclick="goTo('')">☁️ 根目录</span></div>
   <div class="prog" id="prog"></div>
   <div class="file-grid" id="grid"></div>
 </div>
@@ -282,30 +269,31 @@ footer a{color:var(--t2)}
 <div class="toasts" id="toasts"></div>
 
 <!-- Hidden file input -->
-<input type="file" id="fi" multiple style="display:none" onchange="handleUpload(this.files)">
+<input type="file" id="fi" multiple="" style="display:none" onchange="handleUpload(this.files)">
 
-<!-- Mobile floating upload button -->
+<!-- Upload button -->
 <button class="mobile-upload" id="mobile-upload" onclick="document.getElementById('fi').click()" title="上传文件">+</button>
 
 <script>
 // ==================== Config ====================
-// 改成你自己的仓库信息
 const CONFIG = {
-  owner: 'kkyw666',        // GitHub 用户名
-  repo:  'my-drive',        // 仓库名
+  owner: 'kkyw666',
+  repo:  'my-drive',
   branch:'main',
-  folder: 'files',          // 文件存放目录
-  // 管理密码（仅用于管理操作，不会外传）
-  // 建议部署后改成自己的密码
-  adminPassword: 'changeme'
+  folder: 'files',
+  adminPassword: 'changeme',
+  // ========= API 加速 =========
+  // 部署你自己的 Cloudflare Worker，把地址填到这里
+  // 部署方法见页面底部或 README
+  apiProxy: ''
 };
 
 const API = 'https://api.github.com';
 const FULL_PATH = CONFIG.folder;
 
-// ==================== Mirrors ====================
+// ==================== Mirrors (下载加速) ====================
 const MIRRORS = [
-  '',  // 原始链接 (raw.githubusercontent.com)
+  '',
   'https://ghfast.top/',
   'https://gh-proxy.com/',
   'https://github.moeyy.xyz/',
@@ -332,13 +320,43 @@ async function fetchMirror(path) {
   throw new Error('所有链接均失败');
 }
 
+// ==================== API 请求（自动加速） ====================
+// 优先直连 api.github.com，失败时自动走 Worker 代理
+async function apiFetch(path, options = {}) {
+  const directUrl = `${API}${path}`;
+  const headers = options.headers || {};
+
+  // 1. 先尝试直连
+  try {
+    const r = await fetch(directUrl, { ...options, headers, signal: AbortSignal.timeout(6000) });
+    if (r.ok || r.status === 404) return r;
+    // 401/403/422 等也算"连通了"，直接返回让调用方处理
+    if (r.status >= 400 && r.status < 500) return r;
+  } catch (e) {
+    // 直连失败（超时/被墙），尝试代理
+  }
+
+  // 2. 走 Worker 代理
+  if (CONFIG.apiProxy) {
+    try {
+      const proxyUrl = CONFIG.apiProxy.replace(/\/$/, '') + path;
+      return await fetch(proxyUrl, { ...options, headers });
+    } catch (e) {
+      throw new Error('API 直连和代理均失败，请检查网络或代理配置');
+    }
+  }
+
+  // 3. 没有配置代理，抛出原始错误
+  throw new Error('无法连接 GitHub API，建议配置 apiProxy 加速');
+}
+
 // ==================== State ====================
-let FILES = [];          // 当前目录文件列表
-let ALL_FLAT = [];       // 所有文件（递归，用于统计）
-let CUR_PATH = '';       // 当前子目录
-let FILTER = 'all';      // 当前分类
+let FILES = [];
+let ALL_FLAT = [];
+let CUR_PATH = '';
+let FILTER = 'all';
 let IS_ADMIN = false;
-let TOKEN = '';           // admin token (内存中)
+let TOKEN = '';
 
 // ==================== Init ====================
 window.onload = () => {
@@ -349,7 +367,6 @@ window.onload = () => {
 
 // ==================== Data Loading ====================
 async function loadAll() {
-  // 递归获取所有文件用于统计
   ALL_FLAT = [];
   await walkTree(FULL_PATH);
   updateStats();
@@ -358,7 +375,7 @@ async function loadAll() {
 async function walkTree(path) {
   try {
     const h = TOKEN ? { 'Authorization': `token ${TOKEN}` } : {};
-    const r = await fetch(`${API}/repos/${CONFIG.owner}/${CONFIG.repo}/contents/${path}?ref=${CONFIG.branch}`, { headers: h });
+    const r = await apiFetch(`/repos/${CONFIG.owner}/${CONFIG.repo}/contents/${path}?ref=${CONFIG.branch}`, { headers: h });
     if (!r.ok) return;
     const data = await r.json();
     if (!Array.isArray(data)) return;
@@ -378,7 +395,7 @@ async function loadDir() {
   const path = FULL_PATH + (CUR_PATH ? '/' + CUR_PATH : '');
   const h = TOKEN ? { 'Authorization': `token ${TOKEN}` } : {};
   try {
-    const r = await fetch(`${API}/repos/${CONFIG.owner}/${CONFIG.repo}/contents/${path}?ref=${CONFIG.branch}`, { headers: h });
+    const r = await apiFetch(`/repos/${CONFIG.owner}/${CONFIG.repo}/contents/${path}?ref=${CONFIG.branch}`, { headers: h });
     if (r.status === 404) { FILES = []; render(); updateBC(); return; }
     if (!r.ok) throw new Error('加载失败');
     const data = await r.json();
@@ -556,9 +573,8 @@ async function uploadOne(file) {
   try {
     const content = await toBase64(file);
     let sha;
-    // 检查文件是否已存在
     try {
-      const r = await fetch(`${API}/repos/${CONFIG.owner}/${CONFIG.repo}/contents/${fullPath}`, {
+      const r = await apiFetch(`/repos/${CONFIG.owner}/${CONFIG.repo}/contents/${fullPath}`, {
         headers: { 'Authorization': `token ${TOKEN}` }
       });
       if (r.ok) { sha = (await r.json()).sha; }
@@ -570,7 +586,7 @@ async function uploadOne(file) {
     const body = { message: `Upload: ${file.name}`, content, branch: CONFIG.branch };
     if (sha) body.sha = sha;
 
-    const r2 = await fetch(`${API}/repos/${CONFIG.owner}/${CONFIG.repo}/contents/${fullPath}`, {
+    const r2 = await apiFetch(`/repos/${CONFIG.owner}/${CONFIG.repo}/contents/${fullPath}`, {
       method: 'PUT',
       headers: { 'Authorization': `token ${TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
@@ -596,7 +612,6 @@ function toBase64(file) {
   return new Promise((res, rej) => {
     const r = new FileReader();
     r.onload = () => {
-      // data:xxx;base64,xxxxx → 取逗号后面的部分
       const b64 = r.result.split(',')[1];
       res(b64);
     };
@@ -653,17 +668,17 @@ async function renameFile(name, sha) {
   if (!IS_ADMIN) return;
   try {
     const fullPath = FULL_PATH + (CUR_PATH ? '/' + CUR_PATH : '') + '/' + name;
-    const r = await fetch(`${API}/repos/${CONFIG.owner}/${CONFIG.repo}/contents/${fullPath}`, {
+    const r = await apiFetch(`/repos/${CONFIG.owner}/${CONFIG.repo}/contents/${fullPath}`, {
       headers: { 'Authorization': `token ${TOKEN}` }
     });
     const d = await r.json();
     const newPath = FULL_PATH + (CUR_PATH ? '/' + CUR_PATH : '') + '/' + newName;
-    await fetch(`${API}/repos/${CONFIG.owner}/${CONFIG.repo}/contents/${newPath}`, {
+    await apiFetch(`/repos/${CONFIG.owner}/${CONFIG.repo}/contents/${newPath}`, {
       method: 'PUT',
       headers: { 'Authorization': `token ${TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: `Rename: ${name} → ${newName}`, content: d.content, branch: CONFIG.branch })
     });
-    await fetch(`${API}/repos/${CONFIG.owner}/${CONFIG.repo}/contents/${fullPath}`, {
+    await apiFetch(`/repos/${CONFIG.owner}/${CONFIG.repo}/contents/${fullPath}`, {
       method: 'DELETE',
       headers: { 'Authorization': `token ${TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: `Rename: ${name} → ${newName}`, sha: d.sha, branch: CONFIG.branch })
@@ -678,7 +693,7 @@ async function delFile(name, sha) {
   if (!IS_ADMIN) return;
   try {
     const fullPath = FULL_PATH + (CUR_PATH ? '/' + CUR_PATH : '') + '/' + name;
-    await fetch(`${API}/repos/${CONFIG.owner}/${CONFIG.repo}/contents/${fullPath}`, {
+    await apiFetch(`/repos/${CONFIG.owner}/${CONFIG.repo}/contents/${fullPath}`, {
       method: 'DELETE',
       headers: { 'Authorization': `token ${TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: `Delete: ${name}`, sha, branch: CONFIG.branch })
@@ -699,7 +714,7 @@ async function preview(name) {
   const relPath = CUR_PATH ? CUR_PATH + '/' + name : name;
   const fullPath = FULL_PATH + '/' + relPath;
   const mUrls = mirrorUrls(fullPath);
-  const url = mUrls[0]; // 默认用原始链接做 src，浏览器会自动加载
+  const url = mUrls[0];
 
   if (imgExts.includes(ext)) {
     showModal(`<h3>${name}</h3><div class="pv"><img src="${url}" alt="${name}"></div>
@@ -788,5 +803,6 @@ function toast(msg, type = 'ok') {
   setTimeout(() => t.remove(), 4000);
 }
 </script>
+
 </body>
 </html>
