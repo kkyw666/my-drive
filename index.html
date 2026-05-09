@@ -170,7 +170,7 @@ footer a{color:var(--t2)}
   .card .meta{font-size:10px}
 
   /* 卡片操作按钮 - 手机上始终可见 */
-  .card .actions{opacity:1;top:6px;right:6px;gap:3px}
+  .card .actions{opacity:1;top:4px;right:4px;gap:4px;padding:6px;background:rgba(14,14,22,.85);border-radius:10px}
   .card .actions button{width:36px;height:36px;font-size:14px;border-radius:10px}
   .card:hover{transform:none;box-shadow:none}
 
@@ -386,7 +386,7 @@ function render() {
     const dlBtn = !isDir ? `<button onclick="event.stopPropagation();dlFile('${esc(f.name)}')" title="下载">⬇</button>` : '';
     const adminBtns = IS_ADMIN ? `<button onclick="event.stopPropagation();renameFile('${esc(f.name)}','${f.sha}')" title="重命名">✏️</button>
         <button class="d" onclick="event.stopPropagation();delFile('${esc(f.name)}','${f.sha}')" title="删除">🗑</button>` : '';
-    const actionsHtml = (dlBtn || adminBtns) ? `<div class="actions">${dlBtn}${adminBtns}</div>` : '';
+    const actionsHtml = (dlBtn || adminBtns) ? `<div class="actions" onclick="event.stopPropagation()">${dlBtn}${adminBtns}</div>` : '';
     return `<div class="card${isDir?' folder':''}" onclick="${click}" title="${f.name}">
       ${actionsHtml}
       <span class="icon">${icon}</span>
@@ -565,6 +565,7 @@ async function dlFile(name) {
   const relPath = CUR_PATH ? CUR_PATH + '/' + name : name;
   const rawUrl = `https://raw.githubusercontent.com/${CONFIG.owner}/${CONFIG.repo}/${CONFIG.branch}/${FULL_PATH}/${relPath}`;
   try {
+    toast('正在下载...', 'ok');
     const r = await fetch(rawUrl);
     const blob = await r.blob();
     const url = URL.createObjectURL(blob);
@@ -574,8 +575,9 @@ async function dlFile(name) {
     document.body.appendChild(a);
     a.click();
     a.remove();
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   } catch (e) {
+    toast('下载失败，尝试新窗口打开', 'err');
     window.open(rawUrl, '_blank');
   }
 }
